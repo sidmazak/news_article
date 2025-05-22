@@ -1,4 +1,8 @@
+// app/api/process-article/route.ts
 import { NextResponse } from 'next/server';
+import { streamText } from 'ai';
+import { openai } from '@ai-sdk/openai';
+import { Readable } from 'stream';
 import OpenAI from 'openai';
 
 // System prompts for each step - Using detailed prompts from test.js
@@ -186,104 +190,110 @@ const CROSS_CHECK_PROMPT = `You are an AI assistant responsible for verifying co
 5. Provide a final score for the article based on the following:\\n${SCORING_PROMPT}\\n
 Report any inconsistencies found. If no significant inconsistencies are found, confirm the cross-check is successful and provide the validated outputs (rephrased article, score, SEO metadata). If inconsistencies exist, explain them and state that validation failed.`;
 
+// Configure OpenAI with environment variable
+// The API key is picked up automatically from the environment variable OPEN_AI_KEY
+// https://sdk.vercel.ai/docs/getting-started/setup
+// const openaiClient = openai({
+//   apiKey: process.env.OPEN_AI_KEY,
+// });
 
+// Helper function to process each step
 const openaiClient = new OpenAI({
-    apiKey: process.env.OPEN_AI_KEY,
-  });
-  
-  async function processStep(prompt: string, input: string) {
-    try {
-      const response = await openaiClient.chat.completions.create({
-        model: 'gpt-4o',
-        messages: [
-          { role: 'system', content: prompt },
-          { role: 'user', content: input }
-        ]
-      });
-      return response.choices[0].message.content;
-    } catch (err) {
-      console.error('Error during AI processing step:', (err as Error).message);
-      throw err;
-    }
+  apiKey: process.env.OPEN_AI_KEY,
+});
+
+async function processStep(prompt: string, input: string) {
+  try {
+    const response = await openaiClient.chat.completions.create({
+      model: 'gpt-4o',
+      messages: [
+        { role: 'system', content: prompt },
+        { role: 'user', content: `${input}` }
+      ]
+    });
+    return response.choices[0].message.content;
+  } catch (err) {
+    console.error('Error during AI processing step:', (err as Error).message);
+    throw err; // Re-throw to be caught by the main try-catch
   }
-  
-  export async function POST(request: Request) {
-    try {
-        let body;
-        try {
-          body = await request.json();
-        } catch (error) {
-          console.error('JSON Parsing Error:', (error as Error).message, 'Raw body:', await request.text());
-          return NextResponse.json(
-            { error: 'Invalid JSON payload', details: (error as Error).message },
-            { status: 400 }
-          );
-        }
-    
-        const { articleUrl, additionalText } = body;
-    
-        if (!articleUrl) {
-          return NextResponse.json({ error: 'URL is required' }, { status: 400 });
-        }
-  
-      const stream = new ReadableStream({
-        async start(controller) {
-          try {
-            // Step 1: Extraction
-            const extractionInput = `${articleUrl}\n${additionalText}`;
-            const keyInfo = await processStep(EXTRACTION_PROMPT, extractionInput);
-            controller.enqueue(`event: extraction\ndata: ${JSON.stringify({ keyInfo })}\n\n`);
-  
-            // Step 2: Nouns
-            const nouns = await processStep(NOUN_EXTRACTION_PROMPT, articleUrl);
-            controller.enqueue(`event: nouns\ndata: ${JSON.stringify({ nouns })}\n\n`);
-  
-            // Step 3: Rephrasing
-            const rephraseInput = `ARTICLE: ${articleUrl}\nExtracted Details: ${keyInfo}`;
-            const rephraseArticle = await processStep(REPHRASING_PROMPT, rephraseInput);
-            controller.enqueue(`event: rephrase\ndata: ${JSON.stringify({ rephraseArticle })}\n\n`);
-  
-            // Step 4: Scoring
-            const scoringInput = `ARTICLE: ${articleUrl}\nExtracted Details: ${keyInfo}\nRephrased Article: ${rephraseArticle}`;
-            const scoringResult = await processStep(SCORING_PROMPT, scoringInput);
-            controller.enqueue(`event: scoring\ndata: ${JSON.stringify({ scoringResult })}\n\n`);
-  
-            // Step 5: SEO
-            const seoInput = `ARTICLE: ${articleUrl}\nExtracted Details: ${keyInfo}\nRephrased Article: ${rephraseArticle}`;
-            const seoMetadata = await processStep(SEO_PROMPT, seoInput);
-            controller.enqueue(`event: seo\ndata: ${JSON.stringify({ seoMetadata })}\n\n`);
-  
-            // Step 6: Cross-check
-            const crossCheckInput = `
-  Article: ${articleUrl}
-  Extracted Details: ${keyInfo}
-  Extracted Nouns: ${nouns}
-  Rephrased Article: ${rephraseArticle}
-  Scoring Result: ${scoringResult}
-  SEO Metadata: ${seoMetadata}
-  `;
-            const crossCheckResult = await processStep(CROSS_CHECK_PROMPT, crossCheckInput);
-            controller.enqueue(`event: crosscheck\ndata: ${JSON.stringify({ crossCheckResult })}\n\n`);
-  
-            // Signal completion
-            controller.enqueue(`event: complete\ndata: {}\n\n`);
-            controller.close();
-          } catch (error) {
-            controller.enqueue(`event: error\ndata: ${JSON.stringify({ error: (error as Error).message })}\n\n`);
-            controller.close();
-          }
-        }
-      });
-  
-      return new Response(stream, {
-        headers: {
-          'Content-Type': 'text/event-stream',
-          'Cache-Control': 'no-cache',
-          'Connection': 'keep-alive'
-        }
-      });
-    } catch (error) {
-      console.error('API Request Error:', error);
-      return NextResponse.json({ error: (error as Error).message }, { status: 500 });
+}
+
+export async function POST(request: Request) {
+  try {
+    const { articleUrl, additionalText } = await request.json();
+
+    console.log('Received request:', { articleUrl, additionalText });
+
+    if (!articleUrl) {
+      return NextResponse.json({ error: 'URL is required' }, { status: 400 });
     }
+
+    // Process steps sequentially and collect results
+    console.log('Starting processing steps...');
+
+    // Step 1: Extract key information
+    console.log('Starting EXTRACTION step...');
+    const extractionInput = `${articleUrl}\n${additionalText}`;
+    console.log('EXTRACTION Input:', extractionInput);
+    const keyInfo = await processStep(EXTRACTION_PROMPT, extractionInput);
+    console.log('EXTRACTION Raw AI Output:', keyInfo);
+
+    // Step 2: Extract proper nouns
+    console.log('Starting NOUNS step...');
+    console.log('NOUNS Input:', articleUrl);
+    const nouns = await processStep(NOUN_EXTRACTION_PROMPT, articleUrl);
+    console.log('NOUNS Raw AI Output:', nouns);
+
+    // Step 3: Rephrase article
+    console.log('Starting REPHRASING step...');
+    const rephraseInput = `ARTICLE: ${articleUrl}\nExtracted Details: ${keyInfo}`;
+    console.log('REPHRASING Input:', rephraseInput);
+    const rephraseArticle = await processStep(REPHRASING_PROMPT, rephraseInput);
+    console.log('REPHRASING Raw AI Output:', rephraseArticle);
+
+    // Step 4: Score article
+    console.log('Starting SCORING step...');
+    const scoringInput = `ARTICLE: ${articleUrl}\nExtracted Details: ${keyInfo}\nRephrased Article: ${rephraseArticle}`;
+    console.log('SCORING Input:', scoringInput);
+    const scoringResult = await processStep(SCORING_PROMPT, scoringInput);
+    console.log('SCORING Raw AI Output:', scoringResult);
+
+    // Step 5: Generate SEO metadata
+    console.log('Starting SEO step...');
+    const seoInput = `ARTICLE: ${articleUrl}\nExtracted Details: ${keyInfo}\nRephrased Article: ${rephraseArticle}`;
+    console.log('SEO Input:', seoInput);
+    const seoMetadata = await processStep(SEO_PROMPT, seoInput);
+    console.log('SEO Raw AI Output:', seoMetadata);
+
+    // Step 6: Cross-check
+    console.log('Starting CROSSCHECK step...');
+    const crossCheckInput = `
+          Article: ${articleUrl}
+          Extracted Details: ${keyInfo}
+          Extracted Nouns: ${nouns}
+          Rephrased Article: ${rephraseArticle}
+          Scoring Result: ${scoringResult}
+          SEO Metadata: ${seoMetadata}
+        `;
+    console.log('CROSSCHECK Input:', crossCheckInput);
+    const crossCheckResult = await processStep(CROSS_CHECK_PROMPT, crossCheckInput);
+    console.log('CROSSCHECK Raw AI Output:', crossCheckResult);
+
+    // Combine results into a single JSON object
+    const finalResult = {
+      key_info: keyInfo,
+      nouns,
+      rephrase_article: rephraseArticle,
+      scoring_result: scoringResult,
+      seo_metadata: seoMetadata,
+      cross_checked_result: crossCheckResult,
+    };
+
+    console.log('Processing complete. Returning JSON response.');
+    return NextResponse.json(finalResult);
+
+  } catch (error) {
+    console.error('API Request Error:', error);
+    return NextResponse.json({ error: (error as Error).message }, { status: 500 });
   }
+}
