@@ -5,7 +5,7 @@ import { openai } from '@ai-sdk/openai';
 import { Readable } from 'stream';
 import OpenAI from 'openai';
 
-// System prompts for each step - Using detailed prompts from test.js
+
 const EXTRACTION_PROMPT = `# UNIVERSAL CONTENT PROCESSING FRAMEWORK (UCPFv1.0)
 
 You are a multi-domain editorial processor. Analyze ALL inputs as raw data streams. Execute sequentially:
@@ -74,6 +74,7 @@ You are a multi-domain editorial processor. Analyze ALL inputs as raw data strea
 
 BEGIN PROCESSING:`;
 
+
 const NOUN_EXTRACTION_PROMPT = `# UNIVERSAL ENTITY RECOGNITION FRAMEWORK (UERFv2.0)
 
 You are a pattern-agnostic linguistic decoder. Process ALL inputs as encoded data streams. Execute:
@@ -139,28 +140,37 @@ You are a pattern-agnostic linguistic decoder. Process ALL inputs as encoded dat
 
 BEGIN DECODING:`;
 
+
 const REPHRASING_PROMPT = `You are an AI editorial assistant specializing in transforming raw news content into publication-ready articles. Revise the provided material to create a polished piece that adheres to AP Style guidelines while optimizing for digital consumption. Requirements:
 
 1. **Core Objectives**  
-// ... existing code ...
+   - Maintain 100% factual accuracy with zero speculation  
+   - Preserve all critical data: names, dates, statistics, quotes  
+   - Prioritize clarity over creative flair  
+   - Comply with journalistic ethics (attribution, non-sensationalism)
 
 2. **Structural Requirements**  
    - Craft an SEO-friendly headline (60-70 chars) with primary keywords  
-// ... existing code ...
+   - Lead paragraph answering 5W/H (Who, What, When, Where, Why)  
+   - Inverted pyramid structure with decreasing importance  
+   - Section headers for long-form content (H2/H3 levels)  
    - Bite-sized paragraphs (1-3 sentences) for screen readability  
 
 3. **Tone & Style**  
-// ... existing code ...
+   - Authoritative yet accessible (8th-10th grade reading level)  
+   - Active voice preferred (minimum 80% usage)  
+   - Neutral framing of contentious issues  
    - Contextual explanations for niche terminology  
 
 4. **Enhancements**  
-// ... existing code ...
+   - Semantic keyword integration (natural placement only)  
    - Data visualization suggestions [in brackets] where applicable  
    - Cross-references to related topics/public figures  
    - Localization hooks for international audiences  
 
 5. **Formatting Rules**  
-// ... existing code ...
+   - Clean markdown syntax  
+   - Headline: # H1  
    - Sections: ## H2 | ### H3  
    - Bold key takeaways  
    - Bullet points for lists >3 items  
@@ -187,8 +197,9 @@ const CROSS_CHECK_PROMPT = `You are an AI assistant responsible for verifying co
 2. Ensure the rephrased article accurately reflects the original content and includes all essential extracted details.
 3. Confirm the scoring is consistent with the rephrased article's quality and adherence to criteria.
 4. Validate the SEO metadata aligns with the article content.
-5. Provide a final score for the article based on the following:\\n${SCORING_PROMPT}\\n
+5. Provide a final score for the article based on the following:\n${SCORING_PROMPT}\n
 Report any inconsistencies found. If no significant inconsistencies are found, confirm the cross-check is successful and provide the validated outputs (rephrased article, score, SEO metadata). If inconsistencies exist, explain them and state that validation failed.`;
+
 
 // Configure OpenAI with environment variable
 // The API key is picked up automatically from the environment variable OPEN_AI_KEY
