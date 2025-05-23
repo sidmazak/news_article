@@ -205,7 +205,7 @@ Report any inconsistencies found. If no significant inconsistencies are found, c
 const run = async (sys_prompt, prompt) => {
   try {
     const response = await openai.chat.completions.create({
-      model: 'gpt-4o',
+      model: 'gpt-4o-search-preview',
       messages: [
         { role: 'system', content: sys_prompt },
         { role: 'user', content: `${prompt}` }

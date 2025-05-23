@@ -205,7 +205,7 @@ const openaiClient = new OpenAI({
   async function processStep(prompt: string, input: string) {
     try {
       const response = await openaiClient.chat.completions.create({
-        model: 'gpt-4o',
+        model: 'gpt-4o-search-preview',
         messages: [
           { role: 'system', content: prompt },
           { role: 'user', content: input }
